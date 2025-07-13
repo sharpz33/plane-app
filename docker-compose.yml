@@ -6,6 +6,4 @@ services:
     env_file:
       - ./.env
     volumes:
-      # This syncs the local code with the code in the container
-      # for instant updates during development.
       - ./backend:/app

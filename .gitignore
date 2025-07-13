@@ -1,13 +1,6 @@
-# Virtual env files
 venv/
-.venv/
-
-# config files
 .env
-
-# Python cache files
 __pycache__/
 *.pyc
-
-# IDE files
+.idea/
 .vscode/

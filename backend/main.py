@@ -1,21 +1,23 @@
-# backend/main.py
-
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
+from amadeus import Client
+
 import crud
-import schemas
-from database import SessionLocal
-
-# Import components from our project
 import models
-from database import engine
+import schemas
+import location_resolver
+from database import engine, SessionLocal
+from config import settings
 
-# This line is the magic part: it reads all the table definitions
-# from models.py and creates them in the database if they don't exist.
 models.Base.metadata.create_all(bind=engine)
 
-# Dependency to get a DB session
+app = FastAPI(title="Plane! App")
 
+amadeus = Client(
+    client_id=settings.AMADEUS_API_KEY,
+    client_secret=settings.AMADEUS_API_SECRET,
+    hostname='test'
+)
 
 def get_db():
     db = SessionLocal()
@@ -24,20 +26,23 @@ def get_db():
     finally:
         db.close()
 
-
-# Initialize the FastAPI app
-app = FastAPI(title="Plane! App")
-
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to Plane! ✈️"}
 
 @app.post("/alerts/", response_model=schemas.Alert)
 def create_new_alert(alert: schemas.AlertCreate, db: Session = Depends(get_db)):
-    # Na razie pomijamy walidację kodów lotnisk, zrobimy to później
-    return crud.create_alert(db=db, alert=alert)
+    origin_codes = location_resolver.get_iata_codes(db, amadeus, alert.origin_codes)
+    destination_codes = location_resolver.get_iata_codes(db, amadeus, alert.destination_codes)
 
+    if not origin_codes:
+        raise HTTPException(status_code=404, detail=f"Origin location '{alert.origin_codes}' not found.")
+    if not destination_codes:
+        raise HTTPException(status_code=404, detail=f"Destination location '{alert.destination_codes}' not found.")
 
-@app.get("/")
-def read_root():
-    """
-    Root endpoint to check if the application is running.
-    """
-    return {"message": "Welcome to Plane! ✈️ The database should be initialized."}
+    alert_to_create = alert.model_copy(update={
+        "origin_codes": origin_codes,
+        "destination_codes": destination_codes
+    })
+    
+    return crud.create_alert(db=db, alert=alert_to_create)
