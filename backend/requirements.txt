@@ -1,0 +1,11 @@
+# requirements.txt
+
+amadeus
+fastapi
+uvicorn
+pydantic-settings
+python-dotenv
+
+# Database
+sqlalchemy
+alembic

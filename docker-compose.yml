@@ -1,0 +1,11 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./.env
+    volumes:
+      # This syncs the local code with the code in the container
+      # for instant updates during development.
+      - ./backend:/app
