@@ -6,10 +6,12 @@ from database import SessionLocal
 from config import settings
 import models
 import crud
+import notifications
+import time
 
 def find_flight_deals():
     """
-    Main worker function to find flight deals and check if they are new.
+    Main worker function to find flight deals and notify users.
     """
     print("🤖 Worker starting with SMART SEARCH...")
     db: Session = SessionLocal()
@@ -33,6 +35,8 @@ def find_flight_deals():
 
             for origin in origin_codes:
                 if not origin: continue
+                # Be a good API citizen: wait 1 second between requests
+                time.sleep(1)                
                 
                 print(f"  -> Searching for all destinations from: {origin}")
                 
@@ -45,26 +49,30 @@ def find_flight_deals():
                         destination = flight['destination']
                         price = float(flight['price']['total'])
 
-                        # Check if the found flight matches the alert criteria
                         if destination in destination_codes and price <= alert.max_price:
-                            
-                            # Create a unique hash for this specific deal
                             deal_hash = f"{alert.id}-{origin}-{destination}-{flight['departureDate']}-{price}"
-                            
-                            # Check if we have already notified about this deal
                             existing_deal = crud.get_notified_deal_by_hash(db, deal_hash=deal_hash)
                             
                             if existing_deal:
-                                print(f"    INFO: Deal {origin}->{destination} for {price} EUR already notified. Skipping.")
                                 continue
 
-                            # --- NEW DEAL FOUND ---
                             print(f"    ✅ NEW DEAL FOUND! {origin} -> {destination} for {price} EUR.")
                             
-                            # Save this deal to our 'memory' so we don't notify again
-                            crud.create_notified_deal(db, alert_id=alert.id, deal_hash=deal_hash, price=price)
+                            deal_data = {
+                                "origin": origin,
+                                "destination": destination,
+                                "price": price,
+                                "departureDate": flight['departureDate']
+                            }
                             
-                            # In the next step, we will send an email here
+                            # --- CORRECT LOGIC ---
+                            # 1. First, try to send the email.
+                            email_sent = notifications.send_deal_email(alert.user_email, deal_data)
+                            
+                            # 2. Only if the email was sent successfully, save to the database.
+                            if email_sent:
+                                crud.create_notified_deal(db, alert_id=alert.id, deal_hash=deal_hash, price=price)
+                                print(f"    💾 Deal information saved to database.")
 
                 except ResponseError as error:
                     print(f"    INFO: No inspiration flights found for {origin}. Reason: {error.code}")
